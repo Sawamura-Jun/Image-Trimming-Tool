@@ -1,5 +1,6 @@
 import wx
 import os
+import io
 import datetime
 from PIL import Image, ImageDraw, ImageOps, ImageGrab  # enable clipboard capture via ImageGrab
 # Application window constants
@@ -911,8 +912,32 @@ class ImageEditorFrame(wx.Frame):
         keycode = event.GetKeyCode()
         if event.ControlDown() and keycode == ord('V'):
             self.PasteImageFromClipboard()
+        elif event.ControlDown() and keycode == ord('C'):
+            self.CopyImageToClipboard()
         else:
             event.Skip()
+    def CopyImageToClipboard(self):
+        current_image = self.image_panel.current_image
+        if not current_image:
+            wx.MessageBox("画像が読み込まれていません。", "情報", wx.OK | wx.ICON_INFORMATION)
+            return
+        if self.image_panel.file_name.lower().endswith((".jpg", ".jpeg")):
+            wx.MessageBox("容量が増えるためJpeg画像はクリップボードにコピーできません", "情報", wx.OK | wx.ICON_INFORMATION)
+            return
+        try:
+            buffer = io.BytesIO()
+            current_image.save(buffer, format="PNG")
+            png_bytes = buffer.getvalue()
+            data = wx.CustomDataObject(wx.DataFormat("PNG"))
+            data.SetData(png_bytes)
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(data)
+                wx.TheClipboard.Flush()
+                wx.TheClipboard.Close()
+            else:
+                wx.MessageBox("クリップボードを開けませんでした。", "エラー", wx.OK | wx.ICON_ERROR)
+        except Exception:
+            wx.MessageBox("画像のコピーに失敗しました。", "エラー", wx.OK | wx.ICON_ERROR)
     def PasteImageFromClipboard(self):
         try:
             # Use PIL.ImageGrab.grabclipboard() to fetch image data from the clipboard
