@@ -7,3 +7,7 @@ dist/
 
 # PyInstaller spec files
 *.spec
+
+# Compile data
+__pycache__
+*.pyc
