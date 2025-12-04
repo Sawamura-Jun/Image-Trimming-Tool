@@ -11,17 +11,20 @@ DEFAULT_IMAGE_SIZE = 1024
 DEFAULT_JPEG_QUALITY = 70
 LINES = 20
 BACK_GROUND_COLOR = wx.Colour(100, 100, 100)
-CLIPBOARD_SAVE_DIR = r""  # Optional override for clipboard saves; leave empty to use the Desktop on Windows
+CLIPBOARD_SAVE_DIR = r""  # Optional override for clipboard saves; leave empty to use Pictures\\Image-Cropper on Windows
 
 def resolve_clipboard_save_dir():
-    """Return the save directory for clipboard images, defaulting to the Windows Desktop."""
+    """
+    Return the save directory for clipboard images.
+    Uses CLIPBOARD_SAVE_DIR when provided; otherwise defaults to Pictures\\Image-Cropper under the user profile.
+    """
     if CLIPBOARD_SAVE_DIR:
         return CLIPBOARD_SAVE_DIR
-    desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-    if os.path.isdir(desktop):
-        return desktop
-    # Fallback to current working directory if the desktop cannot be resolved
-    return os.getcwd()
+    home = os.path.expanduser("~")
+    if home and home != "~":
+        return os.path.join(home, "Pictures", "Image-Cropper")
+    # Fallback to current working directory if the home directory cannot be resolved
+    return os.path.join(os.getcwd(), "Image-Cropper")
 
 class ImagePanel(wx.Panel):
     HANDLE_SIZE = 10
@@ -890,7 +893,7 @@ class FileDropTarget(wx.FileDropTarget):
 class ImageEditorFrame(wx.Frame):
 
     def __init__(self):
-        super().__init__(None, title="画像編集ツール", size=APP_WINDOW_SIZE)
+        super().__init__(None, title="Image-Cropper", size=APP_WINDOW_SIZE)
         self.InitUI()
         self.Centre()
         self.Show()
