@@ -792,7 +792,7 @@ class ControlPanel(wx.Panel):
         vbox.Add((0, 50), 0, wx.EXPAND)
         # Save
         hbox_quality = wx.BoxSizer(wx.HORIZONTAL)
-        st_quality = wx.StaticText(self, label="圧縮率")
+        st_quality = wx.StaticText(self, label="JPG品質")
         st_quality.SetFont(font)
         self.tc_quality = wx.TextCtrl(self, value=str(DEFAULT_JPEG_QUALITY), style=wx.TE_CENTER, size=(100,35))
         self.tc_quality.SetFont(font)
