@@ -925,7 +925,7 @@ class ImageEditorFrame(wx.Frame):
             wx.MessageBox("画像が読み込まれていません。", "情報", wx.OK | wx.ICON_INFORMATION)
             return
         if self.image_panel.file_name.lower().endswith((".jpg", ".jpeg")):
-            wx.MessageBox("容量が増えるためJpeg画像はクリップボードにコピーできません", "情報", wx.OK | wx.ICON_INFORMATION)
+            wx.MessageBox("容量が増えるためJpeg画像はクリップボードにコピーできません\n挿入から画像を取り込んでください", "コピーを中止しました", wx.OK | wx.ICON_INFORMATION)
             return
         try:
             buffer = io.BytesIO()
