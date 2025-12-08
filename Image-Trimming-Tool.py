@@ -2,8 +2,8 @@ import wx
 import os
 import io
 import datetime
-from PIL import Image, ImageDraw, ImageOps, ImageGrab  # enable clipboard capture via ImageGrab
-# Application window constants
+from PIL import Image, ImageDraw, ImageOps, ImageGrab  # ImageGrabでクリップボードからの取得を有効にする
+# アプリケーションウィンドウの定数
 APP_WINDOW_SIZE = (1224, 680)
 DEFAULT_ROTATION_ANGLE = 0.1
 DEFAULT_CROP_ASPECT = "1:1"
@@ -11,19 +11,19 @@ DEFAULT_IMAGE_SIZE = 1024
 DEFAULT_JPEG_QUALITY = 70
 LINES = 20
 BACK_GROUND_COLOR = wx.Colour(100, 100, 100)
-CLIPBOARD_SAVE_DIR = r""  # Optional override for clipboard saves; leave empty to use Pictures\\Image-Cropper on Windows
+CLIPBOARD_SAVE_DIR = r""  # クリップボード保存先の上書き用。空のままならWindowsではPictures\\Image-Cropperを使用
 
 def resolve_clipboard_save_dir():
     """
-    Return the save directory for clipboard images.
-    Uses CLIPBOARD_SAVE_DIR when provided; otherwise defaults to Pictures\\Image-Cropper under the user profile.
+    クリップボード画像の保存先ディレクトリを返す。
+    CLIPBOARD_SAVE_DIRが設定されていればそれを使い、未設定の場合はユーザープロファイル配下のPictures\\Image-Cropperを既定とする。
     """
     if CLIPBOARD_SAVE_DIR:
         return CLIPBOARD_SAVE_DIR
     home = os.path.expanduser("~")
     if home and home != "~":
         return os.path.join(home, "Pictures", "Image-Cropper")
-    # Fallback to current working directory if the home directory cannot be resolved
+    # ホームディレクトリが解決できないときはカレントディレクトリを使用
     return os.path.join(os.getcwd(), "Image-Cropper")
 
 class ImagePanel(wx.Panel):
@@ -35,16 +35,16 @@ class ImagePanel(wx.Panel):
         self.SetBackgroundColour(BACK_GROUND_COLOR)
         self.SetDoubleBuffered(True)
         self.Bind(wx.EVT_ERASE_BACKGROUND, self.OnEraseBackground)
-        # Cache for scaled bitmap rendering
+        # スケーリングしたビットマップ描画用のキャッシュ
         self._cached_bitmap = None
         self._cached_size = (0, 0)
         self._cached_image_id = None
         self.original_image = None
         self.current_image = None
         self.file_name = ""
-        # True if the current image came from the clipboard
+        # 現在の画像がクリップボードから取得された場合はTrue
         self.from_clipboard = False
-        # Initialize crop rectangle state and history
+        # トリミング矩形の状態と履歴を初期化
         self.crop_rect = None
         self.crop_history = []
         self.max_crop_history = 10
@@ -65,18 +65,21 @@ class ImagePanel(wx.Panel):
         self.Bind(wx.EVT_MOTION, self.OnMouseMove)
         self.Bind(wx.EVT_LEAVE_WINDOW, self.OnMouseLeave)
         self.Bind(wx.EVT_SIZE, self.OnResize)
+
     def OnEraseBackground(self, event):
         pass
+
     def OnResize(self, event):
-        # Update display metrics and rescale the crop rectangle on resize
+        # 画面サイズ変更時に表示寸法を更新し、トリミング範囲を再スケーリング
         self.old_display_width = self.display_width
         self.old_display_height = self.display_height
         self.UpdateDisplayGeometry()
         self.RescaleCropRect()
         self.Refresh()
         event.Skip()
+
     def RescaleCropRect(self):
-        # Skip when previous display size is unavailable
+        # 直前の表示サイズが取得できない場合は処理しない
         if not self.crop_rect or self.old_display_width == 0 or self.old_display_height == 0:
             return
         old_x, old_y, old_w, old_h = self.crop_rect
@@ -97,8 +100,9 @@ class ImagePanel(wx.Panel):
         new_x, new_y, new_w, new_h = self.ClipRect(new_x, new_y, new_w, new_h)
         rect = self._ensure_min_size(wx.Rect(int(round(new_x)), int(round(new_y)), int(round(new_w)), int(round(new_h))))
         self.crop_rect = (rect.x, rect.y, rect.width, rect.height)
+
     def ClipRect(self, x, y, w, h):
-        # Clamp the rectangle within the display area
+        # 矩形を表示エリア内に収める
         if w < 0:
             w = 0
         if h < 0:
@@ -112,6 +116,7 @@ class ImagePanel(wx.Panel):
         if y + h > self.display_height:
             y = self.display_height - h
         return (x, y, w, h)
+
     def UpdateDisplayGeometry(self):
         if not self.current_image:
             self.display_offset_x = 0
@@ -127,21 +132,26 @@ class ImagePanel(wx.Panel):
         self.display_width, self.display_height = new_w, new_h
         self.display_offset_x = (panel_w - new_w) // 2
         self.display_offset_y = (panel_h - new_h) // 2
-        # Reset cached bitmap when geometry changes
+        # 表示サイズが変わったときはキャッシュをリセット
         self._cached_bitmap = None
+
     def _event_to_display_point(self, event):
         x, y = event.GetPosition()
         return wx.Point(x - self.display_offset_x, y - self.display_offset_y)
+
     def _clamp_display_point(self, point):
         return wx.Point(
             max(0, min(point.x, self.display_width)),
             max(0, min(point.y, self.display_height))
         )
+
     def _point_in_display(self, point):
         return 0 <= point.x <= self.display_width and 0 <= point.y <= self.display_height
+
     def _rect_contains_point(self, rect_tuple, point):
         x, y, w, h = rect_tuple
         return x <= point.x <= x + w and y <= point.y <= y + h
+
     def _iter_handle_rects_display(self):
         if not self.crop_rect:
             return []
@@ -165,15 +175,18 @@ class ImagePanel(wx.Panel):
         }
         for name, (px, py) in points.items():
             yield name, wx.Rect(int(round(px)) - half, int(round(py)) - half, self.HANDLE_SIZE, self.HANDLE_SIZE)
+
     def _iter_handle_rects_panel(self):
         for name, rect in self._iter_handle_rects_display():
             rect.Offset(self.display_offset_x, self.display_offset_y)
             yield name, rect
+
     def _hit_test_handle(self, point):
         for name, rect in self._iter_handle_rects_display():
             if rect.Contains(point):
                 return name
         return None
+
     def _get_aspect_ratio(self):
         if not self.fixed_aspect:
             return None
@@ -185,6 +198,7 @@ class ImagePanel(wx.Panel):
             return w_ratio / h_ratio
         except Exception:
             return None
+
     def _ensure_within_display(self, rect):
         if rect is None:
             return wx.Rect()
@@ -208,6 +222,7 @@ class ImagePanel(wx.Panel):
         rect.x = max(0, min(rect.x, self.display_width - rect.width))
         rect.y = max(0, min(rect.y, self.display_height - rect.height))
         return rect
+
     def _ensure_min_size(self, rect):
         rect = self._ensure_within_display(rect)
         if rect.width < self.MIN_CROP_SIZE:
@@ -215,6 +230,7 @@ class ImagePanel(wx.Panel):
         if rect.height < self.MIN_CROP_SIZE:
             rect.height = self.MIN_CROP_SIZE
         return self._ensure_within_display(rect)
+
     def _create_rect_with_ratio(self, anchor, current, ratio):
         dx = current.x - anchor.x
         dy = current.y - anchor.y
@@ -237,6 +253,7 @@ class ImagePanel(wx.Panel):
         top = min(anchor.y, y2)
         rect = wx.Rect(left, top, abs(x2 - anchor.x), abs(y2 - anchor.y))
         return self._ensure_within_display(rect)
+
     def _create_rect(self, anchor, current):
         anchor = self._clamp_display_point(anchor)
         current = self._clamp_display_point(current)
@@ -250,14 +267,17 @@ class ImagePanel(wx.Panel):
             height = abs(current.y - anchor.y)
             rect = wx.Rect(left, top, width, height)
         return self._ensure_min_size(rect)
+
     def _rect_from_crop(self):
         if not self.crop_rect:
             return None
         x, y, w, h = self.crop_rect
         return wx.Rect(int(round(x)), int(round(y)), int(round(w)), int(round(h)))
+
     def _update_selection_creation(self, anchor, current):
         rect = self._create_rect(anchor, current)
         self.crop_rect = (rect.x, rect.y, rect.width, rect.height)
+
     def _update_selection_move(self, dx, dy):
         if not self.original_rect:
             return
@@ -266,6 +286,7 @@ class ImagePanel(wx.Panel):
         rect.y += dy
         rect = self._ensure_min_size(rect)
         self.crop_rect = (rect.x, rect.y, rect.width, rect.height)
+
     def _rect_from_horizontal_anchor(self, anchor_x, width, origin, to_left, ratio):
         width = max(self.MIN_CROP_SIZE, min(width, self.display_width))
         height = max(self.MIN_CROP_SIZE, int(round(width / ratio)))
@@ -284,6 +305,7 @@ class ImagePanel(wx.Panel):
             right = min(self.display_width, left + width)
             left = right - width
         return wx.Rect(int(left), int(top), int(right - left), int(bottom - top))
+
     def _rect_from_vertical_anchor(self, anchor_y, height, origin, to_top, ratio):
         height = max(self.MIN_CROP_SIZE, min(height, self.display_height))
         width = max(self.MIN_CROP_SIZE, int(round(height * ratio)))
@@ -302,6 +324,7 @@ class ImagePanel(wx.Panel):
             bottom = min(self.display_height, top + height)
             top = bottom - height
         return wx.Rect(int(left), int(top), int(right - left), int(bottom - top))
+
     def _resize_corner_with_ratio(self, point, handle, origin, ratio):
         if handle == "top_left":
             anchor = wx.Point(origin.Right, origin.Bottom)
@@ -348,6 +371,7 @@ class ImagePanel(wx.Panel):
             bottom = anchor.y + height
         rect = wx.Rect(int(left), int(top), int(right - left), int(bottom - top))
         return self._ensure_min_size(rect)
+
     def _resize_with_ratio(self, point, handle, ratio):
         if not self.original_rect:
             return wx.Rect()
@@ -371,6 +395,7 @@ class ImagePanel(wx.Panel):
         else:
             rect = self._resize_corner_with_ratio(point, handle, origin, ratio)
         return self._ensure_min_size(rect)
+
     def _resize_free(self, point, handle):
         rect = wx.Rect(self.original_rect)
         left = rect.x
@@ -392,6 +417,7 @@ class ImagePanel(wx.Panel):
         width = max(self.MIN_CROP_SIZE, right - left)
         height = max(self.MIN_CROP_SIZE, bottom - top)
         return wx.Rect(int(left), int(top), int(width), int(height))
+
     def _update_selection_resize(self, point):
         if not self.original_rect or not self.drag_handle:
             return
@@ -402,6 +428,7 @@ class ImagePanel(wx.Panel):
             rect = self._resize_free(point, self.drag_handle)
         rect = self._ensure_min_size(rect)
         self.crop_rect = (rect.x, rect.y, rect.width, rect.height)
+
     def _update_cursor(self, display_point):
         handle = self._hit_test_handle(display_point)
         if handle in ("top_left", "bottom_right"):
@@ -420,6 +447,7 @@ class ImagePanel(wx.Panel):
         else:
             cursor = wx.CURSOR_ARROW
         self.SetCursor(wx.Cursor(cursor))
+
     def ApplyAspectRatioToSelection(self):
         if not self.fixed_aspect or not self.crop_rect:
             return
@@ -450,8 +478,9 @@ class ImagePanel(wx.Panel):
         top = int(round(center_y - height / 2))
         rect = self._ensure_min_size(wx.Rect(left, top, width, height))
         self.crop_rect = (rect.x, rect.y, rect.width, rect.height)
+
     def SetImage(self, pil_image, file_name=""):
-        # Reset clipboard flag when loading from disk
+        # ディスクから読み込むときはクリップボードフラグをリセット
         self.from_clipboard = False
         self.original_image = pil_image.copy()
         self.current_image = pil_image.copy()
@@ -460,7 +489,7 @@ class ImagePanel(wx.Panel):
         self.drag_handle = None
         self.original_rect = None
         self.drag_start = wx.Point()
-        # Reset rotation baseline after loading a new image
+        # 新しい画像を読み込んだあとに回転の基準をリセット
         self.rotation_base_image = self.current_image.copy()
         self.rotation_angle_total = 0.0
         self.file_name = os.path.basename(file_name)
@@ -470,6 +499,7 @@ class ImagePanel(wx.Panel):
         self.UpdateTitle()
         self._cached_bitmap = None
         self.Refresh()
+
     def UpdateTitle(self):
         if self.file_name and self.current_image:
             w, h = self.current_image.size
@@ -477,24 +507,25 @@ class ImagePanel(wx.Panel):
             top_frame = self.GetTopLevelParent()
             if top_frame:
                 top_frame.SetTitle(title)
+
     def OnPaint(self, event):
         dc = wx.BufferedPaintDC(self)
         dc.Clear()
         if self.current_image:
             pos_x = self.display_offset_x
             pos_y = self.display_offset_y
-            # Rebuild cache when image or size has changed
+            # 画像やサイズが変わったときにキャッシュを作り直す
             if (self._cached_bitmap is None or
                 self._cached_size != (self.display_width, self.display_height) or
                 self._cached_image_id != id(self.current_image)):
-                # Use bilinear filtering for interactive redraws
+                # インタラクティブな再描画にはバイリニア補間を使用
                 img_tmp = self.current_image.resize((self.display_width, self.display_height), Image.BILINEAR)
                 buf = img_tmp.convert("RGB").tobytes()
                 self._cached_bitmap = wx.Bitmap.FromBuffer(self.display_width, self.display_height, buf)
                 self._cached_size = (self.display_width, self.display_height)
                 self._cached_image_id = id(self.current_image)
             dc.DrawBitmap(self._cached_bitmap, pos_x, pos_y)
-            # Draw guideline grid
+            # ガイドラインのグリッドを描画
             gc = wx.GraphicsContext.Create(dc)
             if gc:
                 pen = wx.Pen(wx.Colour(255,255,255), width=1, style=wx.PENSTYLE_DOT)
@@ -504,7 +535,7 @@ class ImagePanel(wx.Panel):
                     gc.StrokeLine(pos_x, yy, pos_x + self.display_width, yy)
                     xx = pos_x + int(self.display_width * i / LINES)
                     gc.StrokeLine(xx, pos_y, xx, pos_y + self.display_height)
-            # Draw crop rectangle overlay
+            # トリミング範囲のオーバーレイを描画
             if self.crop_rect:
                 crop_x = self.crop_rect[0] + pos_x
                 crop_y = self.crop_rect[1] + pos_y
@@ -530,6 +561,7 @@ class ImagePanel(wx.Panel):
                 target_dc.SetBrush(wx.Brush(wx.Colour(255, 255, 255)))
                 for _, handle_rect in self._iter_handle_rects_panel():
                     target_dc.DrawRectangle(handle_rect)
+
     def OnLeftUp(self, event):
         previous_mode = self.mode
         if self.HasCapture():
@@ -543,6 +575,7 @@ class ImagePanel(wx.Panel):
             self.crop_rect = (rect.x, rect.y, rect.width, rect.height)
         self._update_cursor(self._event_to_display_point(event))
         event.Skip()
+
     def OnMouseMove(self, event):
         if not self.current_image:
             return
@@ -560,9 +593,11 @@ class ImagePanel(wx.Panel):
             self.Refresh(False)
             return
         self._update_cursor(display_point)
+
     def OnMouseLeave(self, event):
         if self.mode == "idle":
             self.SetCursor(wx.Cursor(wx.CURSOR_ARROW))
+
     def OnLeftDown(self, event):
         if not self.current_image:
             return
@@ -593,9 +628,10 @@ class ImagePanel(wx.Panel):
         if not self.HasCapture():
             self.CaptureMouse()
         self.Refresh(False)
+
     def RotateImage(self, delta):
         if self.rotation_base_image:
-            # Keep cumulative rotation within 0-360 degrees
+            # 累積回転角を0〜360度の範囲に保つ
             self.rotation_angle_total = (self.rotation_angle_total + delta) % 360
             rotated = self.rotation_base_image.rotate(self.rotation_angle_total, expand=True, resample=Image.BICUBIC)
             self.current_image = rotated
@@ -605,6 +641,7 @@ class ImagePanel(wx.Panel):
             self.UpdateDisplayGeometry()
             self.UpdateTitle()
             self.Refresh()
+
     def CropImage(self):
         if self.crop_rect and self.current_image:
             pos_x = self.display_offset_x
@@ -620,7 +657,7 @@ class ImagePanel(wx.Panel):
             scale_y = img_h / disp_h
             rect_w = self.crop_rect[2]
             rect_h = self.crop_rect[3]
-            # Convert display coordinates to image coordinates with round()
+            # 表示座標をround()を使って画像座標へ変換
             x = round(crop_x * scale_x)
             y = round(crop_y * scale_y)
             w = round(rect_w * scale_x)
@@ -636,21 +673,23 @@ class ImagePanel(wx.Panel):
             self.InitCropRect()
             self.UpdateTitle()
             self.Refresh()
-            # Reset rotation baseline after cropping
+            # トリミング後に回転の基準をリセット
             self.rotation_base_image = self.current_image.copy()
             self.rotation_angle_total = 0.0
+
     def RevertCrop(self):
         if len(self.crop_history) > 1:
             self.crop_history.pop()
             self.current_image = self.crop_history[-1].copy()
             self.UpdateDisplayGeometry()
-            # Update title with current file name and size
+            # 現在のファイル名とサイズでタイトルを更新
             self.InitCropRect()
             self.UpdateTitle()
             self.Refresh()
-            # Refresh to reflect updated geometry
+            # 更新された表示サイズを反映させるために再描画
             self.rotation_base_image = self.current_image.copy()
             self.rotation_angle_total = 0.0
+
     def ResizeImage(self, target_size):
         if self.current_image:
             w, h = self.current_image.size
@@ -668,13 +707,14 @@ class ImagePanel(wx.Panel):
                 self.InitCropRect()
                 self.UpdateTitle()
                 self.Refresh()
-                # Reset rotation baseline after resizing the image
+                # 画像サイズ変更後に回転の基準をリセット
                 self.rotation_base_image = self.current_image.copy()
                 self.rotation_angle_total = 0.0
+
     def SaveImage(self, jpeg_quality):
         if self.current_image:
             if self.from_clipboard:
-                # Save clipboard images as PNG with a timestamp
+                # クリップボードからの画像はPNGでタイムスタンプ付き保存
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 file_name = f"clipboard_{timestamp}.png"
                 save_dir = resolve_clipboard_save_dir()
@@ -689,11 +729,12 @@ class ImagePanel(wx.Panel):
                 if ext.lower() in [".jpg", ".jpeg"]:
                     params["quality"] = jpeg_quality
                 self.current_image.save(save_path, **params)
+
     def InitCropRect(self):
         disp_w = self.display_width
         disp_h = self.display_height
         try:
-            # Use aspect ratio from the text box when fixed
+            # 固定時はテキストボックスの縦横比を使用
             if self.fixed_aspect:
                 aspect_str = getattr(self, "crop_aspect", DEFAULT_CROP_ASPECT)
                 w_ratio, h_ratio = map(float, aspect_str.split(":"))
@@ -704,7 +745,7 @@ class ImagePanel(wx.Panel):
                     rect_w = disp_w // 4
                     rect_h = int(rect_w * (h_ratio / w_ratio)) if w_ratio != 0 else disp_h // 4
             else:
-                # Default to a quarter-sized square if parsing fails
+                # 解析に失敗した場合は1/4サイズの正方形をデフォルトにする
                 rect_w = disp_w // 4
                 rect_h = rect_w
         except Exception:
@@ -728,11 +769,12 @@ class ControlPanel(wx.Panel):
         super().__init__(parent, size=(250, -1))
         self.image_panel = image_panel
         self.InitUI()
+
     def InitUI(self):
         vbox = wx.BoxSizer(wx.VERTICAL)
         vbox.Add((0, 20), 0, wx.EXPAND)
         font = wx.Font(17, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
-        # Rotation
+        # 回転
         hbox_rot = wx.BoxSizer(wx.HORIZONTAL)
         st_rot = wx.StaticText(self, label="回転角度:")
         st_rot.SetFont(font)
@@ -753,7 +795,7 @@ class ControlPanel(wx.Panel):
         hbox_rot_btn.Add(btn_rot_right, proportion=1)
         vbox.Add(hbox_rot_btn, flag=wx.EXPAND | wx.ALL, border=5)
         vbox.Add((0, 50), 0, wx.EXPAND)
-        # Aspect
+        # 縦横比
         hbox_crop = wx.BoxSizer(wx.HORIZONTAL)
         self.cb_aspect = wx.CheckBox(self, label="")
         self.cb_aspect.SetValue(True)
@@ -776,7 +818,7 @@ class ControlPanel(wx.Panel):
         btn_revert.Bind(wx.EVT_BUTTON, self.OnRevert)
         vbox.Add(btn_revert, flag=wx.EXPAND | wx.ALL, border=5)
         vbox.Add((0, 50), 0, wx.EXPAND)
-        # Size
+        # サイズ
         hbox_resize = wx.BoxSizer(wx.HORIZONTAL)
         st_resize = wx.StaticText(self, label="画像サイズ:")
         st_resize.SetFont(font)
@@ -790,7 +832,7 @@ class ControlPanel(wx.Panel):
         btn_resize.Bind(wx.EVT_BUTTON, self.OnResizeImage)
         vbox.Add(btn_resize, flag=wx.EXPAND | wx.ALL, border=5)
         vbox.Add((0, 50), 0, wx.EXPAND)
-        # Save
+        # 保存
         hbox_quality = wx.BoxSizer(wx.HORIZONTAL)
         st_quality = wx.StaticText(self, label="JPG品質")
         st_quality.SetFont(font)
@@ -804,18 +846,21 @@ class ControlPanel(wx.Panel):
         btn_save.Bind(wx.EVT_BUTTON, self.OnSave)
         vbox.Add(btn_save, flag=wx.EXPAND | wx.ALL, border=5)
         self.SetSizer(vbox)
+
     def OnRotateLeft(self, event):
         try:
             delta = float(self.tc_rot.GetValue())
             self.image_panel.RotateImage(delta)
         except ValueError:
             wx.MessageBox("回転角度に数値を入力してください。", "エラー", wx.OK | wx.ICON_ERROR)
+
     def OnRotateRight(self, event):
         try:
             delta = float(self.tc_rot.GetValue())
             self.image_panel.RotateImage(-delta)
         except ValueError:
             wx.MessageBox("回転角度に数値を入力してください。", "エラー", wx.OK | wx.ICON_ERROR)
+
     def OnAspectEnter(self, event):
         ratio_str = self.tc_crop.GetValue()
         try:
@@ -831,17 +876,19 @@ class ControlPanel(wx.Panel):
             self.image_panel.Refresh()
         except Exception:
             wx.MessageBox("縦横比の入力形式が不正です。例: 1:1", "エラー", wx.OK | wx.ICON_ERROR)
+
     def OnAspectCheckbox(self, event):
         self.image_panel.fixed_aspect = self.cb_aspect.GetValue()
-        # Maintain the requested aspect ratio when the checkbox is on
+        # チェックボックスがオンのときは指定の縦横比を維持
         if self.cb_aspect.GetValue():
             if self.image_panel.crop_rect:
                 self.image_panel.ApplyAspectRatioToSelection()
             else:
                 self.image_panel.InitCropRect()
         self.image_panel.Refresh()
+
     def OnCrop(self, event):
-        """Handle crop button click."""
+        """トリミングボタン押下時の処理。"""
         if not self.image_panel.crop_rect:
             return
         if self.cb_aspect.GetValue():
@@ -860,16 +907,19 @@ class ControlPanel(wx.Panel):
             except Exception:
                 wx.MessageBox("縦横比の入力形式が不正です。例: 1:1", "エラー", wx.OK | wx.ICON_ERROR)
                 return
-        # Apply the current crop rectangle to the image
+        # 現在のトリミング範囲を画像に反映
         self.image_panel.CropImage()
+
     def OnRevert(self, event):
         self.image_panel.RevertCrop()
+
     def OnResizeImage(self, event):
         try:
             target_size = int(self.tc_resize.GetValue())
             self.image_panel.ResizeImage(target_size)
         except ValueError:
             wx.MessageBox("画像サイズに数値を入力してください。", "エラー", wx.OK | wx.ICON_ERROR)
+
     def OnSave(self, event):
         try:
             quality = int(self.tc_quality.GetValue())
@@ -881,6 +931,7 @@ class FileDropTarget(wx.FileDropTarget):
     def __init__(self, window):
         super().__init__()
         self.window = window
+
     def OnDropFiles(self, x, y, filenames):
         if filenames:
             try:
@@ -897,10 +948,11 @@ class ImageEditorFrame(wx.Frame):
         self.InitUI()
         self.Centre()
         self.Show()
-        self.Refresh()  # Force initial repaint to avoid artifacts
+        self.Refresh()  # 描画欠けを防ぐため初回に再描画を強制
         self.Update()
-        # Bind global shortcut keys (e.g., Ctrl+V)
+        # グローバルショートカットキー（例: Ctrl+V）をバインド
         self.Bind(wx.EVT_CHAR_HOOK, self.OnKeyDown)
+
     def InitUI(self):
         panel = wx.Panel(self)
         hbox = wx.BoxSizer(wx.HORIZONTAL)
@@ -911,6 +963,7 @@ class ImageEditorFrame(wx.Frame):
         panel.SetSizer(hbox)
         dt = FileDropTarget(self)
         self.SetDropTarget(dt)
+
     def OnKeyDown(self, event):
         keycode = event.GetKeyCode()
         if event.ControlDown() and keycode == ord('V'):
@@ -919,6 +972,7 @@ class ImageEditorFrame(wx.Frame):
             self.CopyImageToClipboard()
         else:
             event.Skip()
+
     def CopyImageToClipboard(self):
         current_image = self.image_panel.current_image
         if not current_image:
@@ -941,12 +995,13 @@ class ImageEditorFrame(wx.Frame):
                 wx.MessageBox("クリップボードを開けませんでした。", "エラー", wx.OK | wx.ICON_ERROR)
         except Exception:
             wx.MessageBox("画像のコピーに失敗しました。", "エラー", wx.OK | wx.ICON_ERROR)
+
     def PasteImageFromClipboard(self):
         try:
-            # Use PIL.ImageGrab.grabclipboard() to fetch image data from the clipboard
+            # PIL.ImageGrab.grabclipboard()でクリップボードの画像データを取得
             pasted_image = ImageGrab.grabclipboard()
             if pasted_image:
-                # Save clipboard images with a timestamped PNG name and set the flag to True
+                # クリップボード画像をタイムスタンプ付きPNG名で保存し、フラグをオンにする
                 self.image_panel.SetImage(pasted_image, file_name="clipboard.png")
                 self.image_panel.from_clipboard = True
             else:
