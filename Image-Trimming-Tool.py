@@ -4,7 +4,8 @@ import io
 import datetime
 from PIL import Image, ImageDraw, ImageOps, ImageGrab  # ImageGrabでクリップボードからの取得を有効にする
 # アプリケーションウィンドウの定数
-APP_WINDOW_SIZE = (1224, 680)
+APP_WINDOW_SIZE = (1120, 680)   # デフォルトサイズ
+WINDOW_RESIZE_STEP = 0.2        # マウスホイール1ノッチあたりの拡大縮小率（デフォルト比）
 DEFAULT_ROTATION_ANGLE = 0.1
 DEFAULT_CROP_ASPECT = "1:1"
 DEFAULT_IMAGE_SIZE = 1024
@@ -945,6 +946,7 @@ class ImageEditorFrame(wx.Frame):
 
     def __init__(self):
         super().__init__(None, title="Image-Cropper", size=APP_WINDOW_SIZE)
+        self.SetMinSize(APP_WINDOW_SIZE)
         self.InitUI()
         self.Centre()
         self.Show()
@@ -952,6 +954,8 @@ class ImageEditorFrame(wx.Frame):
         self.Update()
         # グローバルショートカットキー（例: Ctrl+V）をバインド
         self.Bind(wx.EVT_CHAR_HOOK, self.OnKeyDown)
+        # ウィンドウサイズをマウスホイールで変更
+        self.Bind(wx.EVT_MOUSEWHEEL, self.OnMouseWheelResize)
 
     def InitUI(self):
         panel = wx.Panel(self)
@@ -972,6 +976,46 @@ class ImageEditorFrame(wx.Frame):
             self.CopyImageToClipboard()
         else:
             event.Skip()
+
+    def _get_display_client_area(self):
+        display_idx = wx.Display.GetFromWindow(self)
+        if display_idx == -1:
+            display_idx = 0
+        display = wx.Display(display_idx)
+        return display.GetClientArea()
+
+    def _clamp_scale(self, target_scale):
+        base_w, base_h = APP_WINDOW_SIZE
+        display_area = self._get_display_client_area()
+        display_size = display_area.GetSize()
+        max_scale = min(display_size.GetWidth() / base_w, display_size.GetHeight() / base_h)
+        max_scale = max(1.0, max_scale)
+        return max(1.0, min(target_scale, max_scale))
+
+    def _resize_and_center(self, scale):
+        base_w, base_h = APP_WINDOW_SIZE
+        new_w = int(round(base_w * scale))
+        new_h = int(round(base_h * scale))
+        display_area = self._get_display_client_area()
+        area_pos = display_area.GetPosition()
+        area_size = display_area.GetSize()
+        new_x = area_pos.x + (area_size.GetWidth() - new_w) // 2
+        new_y = area_pos.y + (area_size.GetHeight() - new_h) // 2
+        self.SetSize(wx.Rect(new_x, new_y, new_w, new_h))
+
+    def OnMouseWheelResize(self, event):
+        rotation = event.GetWheelRotation()
+        if rotation == 0:
+            event.Skip()
+            return
+        steps = rotation / event.GetWheelDelta()
+        base_w, _ = APP_WINDOW_SIZE
+        current_width = self.GetSize().GetWidth()
+        current_scale = current_width / base_w
+        target_scale = current_scale + WINDOW_RESIZE_STEP * steps
+        clamped_scale = self._clamp_scale(target_scale)
+        self._resize_and_center(clamped_scale)
+        event.Skip(False)
 
     def CopyImageToClipboard(self):
         current_image = self.image_panel.current_image
