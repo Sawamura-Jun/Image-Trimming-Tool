@@ -1,3 +1,5 @@
+# python -m PyInstaller -y --onedir --noconsole --name ImageCrop --icon=".\ico\ImageCrop.ico" --add-data ".\ico\ImageCrop.ico;ico" --clean Image-Trimming-Tool.py
+
 import datetime
 import os
 import sys
@@ -14,7 +16,6 @@ from PySide6.QtGui import (
     QIntValidator,
     QKeySequence,
     QPainter,
-    QPainterPath,
     QPen,
     QPixmap,
     QShortcut,
@@ -60,6 +61,7 @@ TEXT_COLOR = "#f4f6f8"
 MUTED_TEXT_COLOR = "#aeb6c2"
 ACCENT_COLOR = QColor(66, 184, 255)
 ACCENT_HEX = "#42b8ff"
+GUIDE_LINE_COLOR = QColor(255, 0, 0, 66)
 
 # 画像編集の既定値
 DEFAULT_ROTATION_ANGLE = 0.1
@@ -718,7 +720,7 @@ class ImagePanel(QWidget):
         painter.drawPixmap(image_rect, self._cached_pixmap)
 
         # 構図を確認しやすい薄いグリッドを描画する
-        grid_pen = QPen(QColor(255, 255, 255, 66), 1, Qt.PenStyle.DotLine)
+        grid_pen = QPen(GUIDE_LINE_COLOR, 2, Qt.PenStyle.DotLine)
         painter.setPen(grid_pen)
         for index in range(GRID_LINES + 1):
             horizontal_y = self.display_offset_y + round(self.display_height * index / GRID_LINES)
@@ -746,12 +748,7 @@ class ImagePanel(QWidget):
             round(crop_height),
         )
 
-        # 選択範囲の外側だけを半透明で暗くする
-        overlay = QPainterPath()
-        overlay.setFillRule(Qt.FillRule.OddEvenFill)
-        overlay.addRect(self.rect())
-        overlay.addRect(crop_panel_rect)
-        painter.fillPath(overlay, QColor(0, 0, 0, 145))
+        # 選択範囲の外側も元画像の明るさを保つ
         painter.setPen(QPen(ACCENT_COLOR, 2))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRect(crop_panel_rect)
